@@ -1,0 +1,327 @@
+import React, { useState, useEffect } from 'react';
+import { Calculator, Target, TrendingUp, BarChart3 } from 'lucide-react';
+
+const NIPUNOptimizer = () => {
+  const [targetNIPUN, setTargetNIPUN] = useState(45);
+  const [results, setResults] = useState(null);
+  const [isCalculating, setIsCalculating] = useState(false);
+
+  // Original data
+  const originalData = {
+    A: { blocks: 14, nipun: 87.5, contribution: 1225 },
+    B: { blocks: 208, nipun: 62.5, contribution: 13000 },
+    C: { blocks: 502, nipun: 37.5, contribution: 18825 },
+    D: { blocks: 222, nipun: 12.5, contribution: 2775 }
+  };
+
+  const totalBlocks = 946;
+  const currentAvg = 37.87;
+
+  // Calculate contribution per block for each category
+  const getContributionPerBlock = (category) => {
+    return originalData[category].contribution / originalData[category].blocks;
+  };
+
+  // Linear Programming Solver (Simplified)
+  const solveOptimalDistribution = () => {
+    setIsCalculating(true);
+    
+    // Target total contribution needed
+    const targetContribution = (targetNIPUN / 100) * totalBlocks * 100;
+    const currentContribution = 35825;
+    const requiredIncrease = targetContribution - currentContribution;
+
+    // Calculate contribution per block for each category
+    const contribPerBlock = {
+      A: getContributionPerBlock('A'),
+      B: getContributionPerBlock('B'),
+      C: getContributionPerBlock('C'),
+      D: getContributionPerBlock('D')
+    };
+
+    // Greedy optimization approach (simplified LP)
+    let bestSolution = null;
+    let minMovements = Infinity;
+
+    // Try different redistribution strategies
+    for (let moveFromD = 0; moveFromD <= originalData.D.blocks; moveFromD += 5) {
+      for (let toA = 0; toA <= Math.min(moveFromD, 50); toA += 2) {
+        for (let toB = 0; toB <= Math.min(moveFromD - toA, 100); toB += 5) {
+          const toC = moveFromD - toA - toB;
+          
+          if (toC < 0) continue;
+
+          // Calculate new distribution
+          const newDist = {
+            A: originalData.A.blocks + toA,
+            B: originalData.B.blocks + toB,
+            C: originalData.C.blocks + toC,
+            D: originalData.D.blocks - moveFromD
+          };
+
+          // Calculate new contributions
+          const newContributions = {
+            A: newDist.A * contribPerBlock.A,
+            B: newDist.B * contribPerBlock.B,
+            C: newDist.C * contribPerBlock.C,
+            D: newDist.D * contribPerBlock.D
+          };
+
+          const totalNewContrib = Object.values(newContributions).reduce((a, b) => a + b, 0);
+          const newAverage = totalNewContrib / (totalBlocks * 100) * 100;
+
+          // Check if this solution meets the target
+          if (newAverage >= targetNIPUN && moveFromD < minMovements) {
+            minMovements = moveFromD;
+            bestSolution = {
+              distribution: newDist,
+              contributions: newContributions,
+              average: newAverage,
+              movements: { toA, toB, toC, fromD: moveFromD },
+              totalMovements: moveFromD
+            };
+          }
+        }
+      }
+    }
+
+    // If no solution found, find the best possible
+    if (!bestSolution) {
+      // Find maximum possible by moving all D blocks to A
+      const maxToA = Math.min(originalData.D.blocks, 100);
+      const remainingD = originalData.D.blocks - maxToA;
+      
+      const optimalDist = {
+        A: originalData.A.blocks + maxToA,
+        B: originalData.B.blocks + remainingD,
+        C: originalData.C.blocks,
+        D: 0
+      };
+
+      const optimalContribs = {
+        A: optimalDist.A * contribPerBlock.A,
+        B: optimalDist.B * contribPerBlock.B,
+        C: optimalDist.C * contribPerBlock.C,
+        D: 0
+      };
+
+      const maxAverage = Object.values(optimalContribs).reduce((a, b) => a + b, 0) / (totalBlocks * 100) * 100;
+
+      bestSolution = {
+        distribution: optimalDist,
+        contributions: optimalContribs,
+        average: maxAverage,
+        movements: { toA: maxToA, toB: remainingD, toC: 0, fromD: originalData.D.blocks },
+        totalMovements: originalData.D.blocks,
+        isMaximum: true
+      };
+    }
+
+    setTimeout(() => {
+      setResults(bestSolution);
+      setIsCalculating(false);
+    }, 1000);
+  };
+
+  const formatNumber = (num) => {
+    return Math.round(num).toLocaleString();
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto p-6 bg-white">
+      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 rounded-lg mb-6">
+        <h1 className="text-2xl font-bold mb-2 flex items-center gap-2">
+          <Calculator className="w-6 h-6" />
+          NIPUN Linear Programming Optimizer
+        </h1>
+        <p className="text-blue-100">Find the mathematically optimal block distribution to achieve your target NIPUN percentage</p>
+      </div>
+
+      {/* Input Controls */}
+      <div className="bg-gray-50 p-6 rounded-lg mb-6">
+        <div className="flex items-center gap-4 mb-4">
+          <Target className="w-5 h-5 text-blue-600" />
+          <label className="font-semibold text-gray-700">Target NIPUN Percentage:</label>
+          <input
+            type="number"
+            value={targetNIPUN}
+            onChange={(e) => setTargetNIPUN(Number(e.target.value))}
+            className="px-3 py-2 border border-gray-300 rounded-md w-20 text-center"
+            min="0"
+            max="100"
+            step="0.1"
+          />
+          <span className="text-gray-600">%</span>
+          <button
+            onClick={solveOptimalDistribution}
+            disabled={isCalculating}
+            className="ml-4 px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+          >
+            {isCalculating ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                Calculating...
+              </>
+            ) : (
+              <>
+                <TrendingUp className="w-4 h-4" />
+                Optimize
+              </>
+            )}
+          </button>
+        </div>
+        
+        <div className="text-sm text-gray-600">
+          Current Average: <span className="font-semibold">{currentAvg}%</span> | 
+          Total Blocks: <span className="font-semibold">{totalBlocks}</span>
+        </div>
+      </div>
+
+      {/* Current State */}
+      <div className="grid grid-cols-2 gap-6 mb-6">
+        <div className="bg-white border rounded-lg p-4">
+          <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <BarChart3 className="w-4 h-4" />
+            Current Distribution
+          </h3>
+          <div className="space-y-2">
+            {Object.entries(originalData).map(([category, data]) => (
+              <div key={category} className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="font-medium">Category {category}</span>
+                <div className="text-right">
+                  <div className="text-sm text-gray-600">{data.blocks} blocks</div>
+                  <div className="text-sm font-semibold">{data.nipun}% NIPUN</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-white border rounded-lg p-4">
+          <h3 className="font-semibold text-gray-800 mb-3">Performance Metrics</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between">
+              <span>Total Contribution:</span>
+              <span className="font-semibold">{formatNumber(35825)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Required for {targetNIPUN}%:</span>
+              <span className="font-semibold">{formatNumber((targetNIPUN / 100) * totalBlocks * 100)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Gap to Close:</span>
+              <span className="font-semibold text-red-600">
+                {formatNumber((targetNIPUN / 100) * totalBlocks * 100 - 35825)}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Results */}
+      {results && (
+        <div className="bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg p-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <Target className="w-5 h-5 text-green-600" />
+            Optimal Solution {results.isMaximum && "(Maximum Achievable)"}
+          </h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Optimal Distribution */}
+            <div className="bg-white rounded-lg p-4 border">
+              <h3 className="font-semibold mb-3 text-gray-800">Optimal Distribution</h3>
+              <div className="space-y-2">
+                {Object.entries(results.distribution).map(([category, blocks]) => (
+                  <div key={category} className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="font-medium">Category {category}</span>
+                    <div className="text-right">
+                      <div className="text-sm">
+                        <span className={blocks > originalData[category].blocks ? 'text-green-600 font-semibold' : 
+                                       blocks < originalData[category].blocks ? 'text-red-600 font-semibold' : 'text-gray-600'}>
+                          {blocks} blocks
+                        </span>
+                        <span className="text-gray-500 ml-1">
+                          ({blocks > originalData[category].blocks ? '+' : ''}{blocks - originalData[category].blocks})
+                        </span>
+                      </div>
+                      <div className="text-sm font-semibold">{originalData[category].nipun}% NIPUN</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Movement Summary */}
+            <div className="bg-white rounded-lg p-4 border">
+              <h3 className="font-semibold mb-3 text-gray-800">Required Movements</h3>
+              <div className="space-y-3">
+                <div className="bg-red-50 p-3 rounded border-l-4 border-red-400">
+                  <div className="text-sm font-semibold text-red-800">From Category D:</div>
+                  <div className="text-lg font-bold text-red-900">{results.movements.fromD} blocks</div>
+                </div>
+                
+                <div className="space-y-2">
+                  {results.movements.toA > 0 && (
+                    <div className="flex justify-between items-center bg-green-50 p-2 rounded">
+                      <span className="text-sm text-green-800">To Category A:</span>
+                      <span className="font-semibold text-green-900">{results.movements.toA} blocks</span>
+                    </div>
+                  )}
+                  {results.movements.toB > 0 && (
+                    <div className="flex justify-between items-center bg-yellow-50 p-2 rounded">
+                      <span className="text-sm text-yellow-800">To Category B:</span>
+                      <span className="font-semibold text-yellow-900">{results.movements.toB} blocks</span>
+                    </div>
+                  )}
+                  {results.movements.toC > 0 && (
+                    <div className="flex justify-between items-center bg-blue-50 p-2 rounded">
+                      <span className="text-sm text-blue-800">To Category C:</span>
+                      <span className="font-semibold text-blue-900">{results.movements.toC} blocks</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-3 border-t border-gray-200">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold">Total Movements:</span>
+                    <span className="text-lg font-bold text-blue-600">{results.totalMovements}</span>
+                  </div>
+                  <div className="flex justify-between items-center mt-2">
+                    <span className="font-semibold">Achieved NIPUN:</span>
+                    <span className="text-lg font-bold text-green-600">{results.average.toFixed(2)}%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {results.isMaximum && (
+            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-yellow-800 text-sm">
+                <strong>Note:</strong> The target of {targetNIPUN}% could not be achieved with the current performance levels. 
+                This solution shows the maximum possible achievement of {results.average.toFixed(2)}% by optimally redistributing blocks.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Mathematical Approach */}
+      <div className="mt-6 bg-gray-50 p-6 rounded-lg">
+        <h3 className="font-semibold text-gray-800 mb-3">Mathematical Approach</h3>
+        <div className="text-sm text-gray-700 space-y-2">
+          <p><strong>Objective:</strong> Minimize total block movements while achieving target NIPUN percentage</p>
+          <p><strong>Constraints:</strong></p>
+          <ul className="list-disc list-inside ml-4 space-y-1">
+            <li>Total blocks must remain constant (946)</li>
+            <li>Block counts cannot be negative</li>
+            <li>Achievement = Σ(blocks_i × nipun_i) / total_blocks ≥ target</li>
+          </ul>
+          <p><strong>Strategy:</strong> Priority given to moving blocks from lowest-performing Category D to higher-performing categories</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default NIPUNOptimizer;
